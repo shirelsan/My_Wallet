@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>My Wallet - Personal Expense Tracker</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@300;400;500;600;700;800;900&family=Playfair+Display:wght@700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+
+  <!-- ══════════════════════════════════════════════════════════
+       SPA OUTLET — the router renders pages here
+  ══════════════════════════════════════════════════════════ -->
+  <div id="spa-outlet"></div>
+
+  <!-- ══════════════════════════════════════════════════════════
+       TOAST CONTAINER — always present in DOM
+  ══════════════════════════════════════════════════════════ -->
+  <div id="toast-container" class="toast-container"></div>
+
+  <!-- ══════════════════════════════════════════════════════════
+       PAGE TEMPLATES
+       Each <template> is cloned into #spa-outlet on navigation.
+  ══════════════════════════════════════════════════════════ -->
+
+  <!-- ── Template: Auth (Login / Register) ─────────────────── -->
+  <template id="tpl-auth">
+    <div id="authScreen">
+      <div class="auth-card">
+
+        <div class="auth-logo">
+          <!-- <div class="auth-logo-icon">💳</div>   -->    
+          <div class="auth-logo-icon">
+            <img src="logo.png" alt="My Wallet" style="width:110px; height:110px; object-fit:contain;" />
+          </div> 
+          <h1>My Wallet</h1>
+          <p>Personal expense tracker</p>
+        </div>
+
+        <!-- Tab switcher -->
+        <div class="auth-tabs">
+          <button class="auth-tab active" id="tab-login">Sign In</button>
+          <button class="auth-tab"        id="tab-register">Register</button>
+        </div>
+
+        <!-- Login form -->
+        <div id="form-login">
+          <div class="form-group">
+            <label for="login-username">Username</label>
+            <input class="form-input" id="login-username" type="text"
+                   placeholder="your username" autocomplete="username" />
+          </div>
+          <div class="form-group">
+            <label for="login-password">Password</label>
+            <input class="form-input" id="login-password" type="password"
+                   placeholder="••••••••" autocomplete="current-password" />
+          </div>
+          <button class="btn-primary" id="btn-login">
+            <span>Sign In</span>
+          </button>
+        </div>
+
+        <!-- Register form -->
+        <div id="form-register" style="display:none">
+          <div class="form-group">
+            <label for="reg-username">Username</label>
+            <input class="form-input" id="reg-username" type="text"
+                   placeholder="choose a username" autocomplete="username" />
+          </div>
+          <div class="form-group">
+            <label for="reg-email">Email</label>
+            <input class="form-input" id="reg-email" type="email"
+                   placeholder="you@example.com" autocomplete="email" />
+          </div>
+          <div class="form-group">
+            <label for="reg-password">Password</label>
+            <input class="form-input" id="reg-password" type="password"
+                   placeholder="min. 4 characters" autocomplete="new-password" />
+          </div>
+          <button class="btn-primary" id="btn-register">
+            <span>Create Account</span>
+          </button>
+        </div>
+
+        <!-- Status message -->
+        <div class="auth-msg" id="auth-msg"></div>
+
+      </div><!-- /.auth-card -->
+    </div><!-- /#authScreen -->
+  </template>
+
+
+  <!-- ── Template: Main App ─────────────────────────────────── -->
+  <template id="tpl-app">
+    <div id="appScreen" style="display:block">
+
+      <!-- ── Sidebar ──────────────────────────────────────── -->
+      <nav class="sidebar">
+        <div class="sidebar-logo">
+          <div class="sidebar-logo-icon">
+            <img src="logo.png" alt="My Wallet" style="width:90px; height:90px; object-fit:contain;" />
+          </div>
+
+          <span>My Wallet</span>
+        </div>
+
+        <div class="sidebar-user">
+          <div class="avatar" id="user-avatar">?</div>
+          <div class="sidebar-user-info">
+            <div class="name" id="sidebar-username">—</div>
+            <div class="role">Personal account</div>
+          </div>
+        </div>
+
+        <button class="nav-item active" id="nav-all">
+          <span class="nav-icon">💸</span> All Expenses
+        </button>
+        <button class="nav-item" id="nav-unpaid">
+          <span class="nav-icon">⏳</span> Pending
+        </button>
+        <button class="nav-item" id="nav-paid">
+          <span class="nav-icon">✅</span> Paid
+        </button>
+
+        <div class="sidebar-bottom">
+          <button class="btn-logout" id="btn-logout">
+            <span>🚪</span> Sign Out
+          </button>
+        </div>
+      </nav>
+
+      <!-- ── Main content ──────────────────────────────────── -->
+      <main class="main">
+
+        <div class="main-header">
+          <div>
+            <h2 id="view-title">All Expenses</h2>
+            <p  id="view-subtitle">Track and manage your spending</p>
+          </div>
+        </div>
+
+        <!-- Summary cards -->
+        <div class="summary-grid">
+          <div class="summary-card blue">
+            <div class="summary-icon">💳</div>
+            <div class="summary-label">Total</div>
+            <div class="summary-value" id="stat-total">₪0</div>
+            <div class="summary-sub"   id="stat-count">0 expenses</div>
+          </div>
+          <div class="summary-card orange">
+            <div class="summary-icon">⏳</div>
+            <div class="summary-label">Pending</div>
+            <div class="summary-value" id="stat-unpaid">₪0</div>
+            <div class="summary-sub"   id="stat-unpaid-count">0 expenses</div>
+          </div>
+          <div class="summary-card green">
+            <div class="summary-icon">✅</div>
+            <div class="summary-label">Paid</div>
+            <div class="summary-value" id="stat-paid">₪0</div>
+            <div class="summary-sub"   id="stat-paid-count">0 expenses</div>
+          </div>
+        </div>
+
+        <!-- Expense list -->
+        <div class="section-card">
+          <div class="section-header">
+            <h3 id="list-title">All Expenses</h3>
+            <div class="toolbar">
+              <div class="search-wrap">
+                <span class="search-icon">🔍</span>
+                <input class="search-input" id="search-input" type="text"
+                       placeholder="Search expenses…" />
+              </div>
+              <button class="btn-add" id="btn-add">＋ Add Expense</button>
+            </div>
+          </div>
+
+          <div class="expense-list" id="expense-list">
+            <div class="loading-row">
+              <span class="spinner"></span> Loading your expenses…
+            </div>
+          </div>
+        </div>
+
+      </main><!-- /.main -->
+
+      <!-- ── Modal: Add / Edit expense ─────────────────────── -->
+      <div class="modal-overlay" id="expense-modal">
+        <div class="modal">
+          <div class="modal-header">
+            <h3 id="modal-title">Add Expense</h3>
+            <button class="modal-close" id="btn-modal-close">✕</button>
+          </div>
+
+          <div class="form-group">
+            <label for="exp-title">Title</label>
+            <input class="form-input" id="exp-title"
+                   placeholder="e.g. Grocery shopping" />
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label for="exp-amount">Amount (₪)</label>
+              <input class="form-input" id="exp-amount"
+                     type="number" min="0" step="0.01" placeholder="0.00" />
+            </div>
+            <div class="form-group">
+              <label for="exp-date">Date</label>
+              <input class="form-input" id="exp-date" type="date" />
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label for="exp-category">Category</label>
+              <select class="form-select" id="exp-category">
+                <option value="Food">🍔 Food</option>
+                <option value="Transport">🚗 Transport</option>
+                <option value="Health">🏥 Health</option>
+                <option value="Housing">🏠 Housing</option>
+                <option value="Shopping">🛍️ Shopping</option>
+                <option value="General">📦 General</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="exp-paid">Status</label>
+              <select class="form-select" id="exp-paid">
+                <option value="false">⏳ Pending</option>
+                <option value="true">✅ Paid</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="exp-desc">Description (optional)</label>
+            <input class="form-input" id="exp-desc" placeholder="Add a note…" />
+          </div>
+
+          <div class="modal-footer">
+            <button class="btn-cancel" id="btn-cancel">Cancel</button>
+            <button class="btn-save"   id="btn-save">Save Expense</button>
+          </div>
+        </div><!-- /.modal -->
+      </div><!-- /.modal-overlay -->
+
+    </div><!-- /#appScreen -->
+  </template>
+
+
+  <!-- ══════════════════════════════════════════════════════════
+       SCRIPTS — load order matters!
+       1. dbApi.js        — LocalStorage DB (no dependencies)
+       2. authServer.js   — needs DBUsers  (from dbApi.js)
+       3. appServer.js    — needs DBExpenses + AuthServer
+       4. network.js      — needs AuthServer + AppServer
+       5. fajax.js        — needs Network
+       6. spa.js          — standalone router
+       7. app.js          — needs everything above
+  ══════════════════════════════════════════════════════════ -->
+  <script src="js/dbApi.js"></script>
+  <script src="js/authServer.js"></script>
+  <script src="js/appServer.js"></script>
+  <script src="js/network.js"></script>
+  <script src="js/fajax.js"></script>
+  <script src="js/spa.js"></script>
+  <script src="js/app.js"></script>
+
+</body>
+</html>
