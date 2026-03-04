@@ -18,11 +18,16 @@
      { status: number, ok: boolean, message: string, data: any }
    ============================================================ */
 
+/* ============================================================
+   appServer.js — Expenses Application Server (Async Version)
+   
+   *** UPDATED: Now uses callbacks for async communication ***
+   ============================================================ */
+
 const AppServer = (() => {
 
   /* ── Authentication check ───────────────────────────────── */
   function _auth(token) {
-    // Returns userId string, or null if token invalid / missing
     return token ? AuthServer.validateToken(token) : null;
   }
 
@@ -31,12 +36,6 @@ const AppServer = (() => {
   }
 
   /* ── URL parser ─────────────────────────────────────────── */
-  // Extracts id and optional sub-action from the URL path.
-  // Examples:
-  //   /expenses           → { id: null,     action: null  }
-  //   /expenses/exp_123   → { id: 'exp_123', action: null  }
-  //   /expenses/exp_123/pay → { id: 'exp_123', action: 'pay' }
-  //   /expenses/search    → { id: 'search', action: null  }
   function _parseUrl(url) {
     const parts = url.replace('/expenses', '').split('/').filter(Boolean);
     return {
@@ -47,7 +46,7 @@ const AppServer = (() => {
 
   /* ── Body validator ─────────────────────────────────────── */
   function _validateBody(body) {
-    if (!body)                             return 'Request body is missing';
+    if (!body) return 'Request body is missing';
     if (!body.title || !body.title.trim()) return 'Title is required';
     if (body.amount === undefined || body.amount === null) return 'Amount is required';
     if (isNaN(parseFloat(body.amount)) || parseFloat(body.amount) < 0)
@@ -55,7 +54,7 @@ const AppServer = (() => {
     return null;
   }
 
-  /* ── Route handlers ─────────────────────────────────────── */
+  /* ── Route handlers (remain synchronous internally) ──────── */
   function _getAll(userId) {
     const expenses = DBExpenses.getAllByUser(userId);
     return { status: 200, ok: true, message: 'OK', data: expenses };
@@ -68,7 +67,6 @@ const AppServer = (() => {
   }
 
   function _search(url, userId) {
-    // Extract ?q= param from the full URL string
     const qIdx = url.indexOf('?q=');
     const query = qIdx !== -1 ? decodeURIComponent(url.slice(qIdx + 3)) : '';
     const results = DBExpenses.search(query, userId);
@@ -112,40 +110,63 @@ const AppServer = (() => {
   /* ── Public interface ───────────────────────────────────── */
 
   /**
-   * Main entry point — called by Network when a /expenses/* message arrives.
-   * @param {{ method, url, token, body }} msg
-   * @returns {{ status, ok, message, data }} response
+   * *** UPDATED: Main entry point — now ASYNC with callback ***
+   * Called by Network when a /expenses/* message arrives.
+   * 
+   * @param {{ method, url, token, body }} msg - Request message
+   * @param {Function} callback - Called with response: (response) => void
    */
-  function handleRequest(msg) {
+  function handleRequest(msg, callback) {
+    // ↑ הוספנו פרמטר callback!
+    
     console.log(`[AppServer] ${msg.method} ${msg.url}`);
 
     // 1. Authenticate
     const userId = _auth(msg.token);
-    if (!userId) return _unauthorized();
+    if (!userId) {
+      callback(_unauthorized());
+      // ↑ במקום return - קורא ל-callback
+      return;
+    }
 
     // 2. Parse URL
     const { id, action } = _parseUrl(msg.url);
 
     try {
-      // Special routes first
-      // GET /expenses/search?q=...
-      if (msg.method === 'GET' && id === 'search') return _search(msg.url, userId);
-
-      // PUT /expenses/:id/pay
-      if (msg.method === 'PUT' && action === 'pay') return _togglePay(id, userId);
-
-      // Standard REST
-      switch (msg.method) {
-        case 'GET':    return id ? _getOne(id, userId) : _getAll(userId);
-        case 'POST':   return _create(msg.body, userId);
-        case 'PUT':    return _update(id, msg.body, userId);
-        case 'DELETE': return _delete(id, userId);
-        default:
-          return { status: 405, ok: false, message: `Method not allowed: ${msg.method}`, data: null };
+      let response;  // ← נשמור את התגובה
+      
+      // Special routes
+      if (msg.method === 'GET' && id === 'search') {
+        response = _search(msg.url, userId);
+      } else if (msg.method === 'PUT' && action === 'pay') {
+        response = _togglePay(id, userId);
+      } else {
+        // Standard REST
+        switch (msg.method) {
+          case 'GET':
+            response = id ? _getOne(id, userId) : _getAll(userId);
+            break;
+          case 'POST':
+            response = _create(msg.body, userId);
+            break;
+          case 'PUT':
+            response = _update(id, msg.body, userId);
+            break;
+          case 'DELETE':
+            response = _delete(id, userId);
+            break;
+          default:
+            response = { status: 405, ok: false, message: `Method not allowed: ${msg.method}`, data: null };
+        }
       }
+      
+      // ✨ במקום return - קורא ל-callback!
+      callback(response);
+      
     } catch (e) {
       console.error('[AppServer] Internal error:', e);
-      return { status: 500, ok: false, message: 'Internal server error', data: null };
+      const errorResponse = { status: 500, ok: false, message: 'Internal server error', data: null };
+      callback(errorResponse);
     }
   }
 

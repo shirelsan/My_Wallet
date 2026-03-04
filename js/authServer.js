@@ -16,10 +16,17 @@
    to authenticate every expense request.
    ============================================================ */
 
+/* ============================================================
+   authServer.js — Authentication Server (Async Version)
+   
+   *** UPDATED: Now uses callbacks for async communication ***
+   
+   handleRequest(msg, callback) - callback receives response
+   ============================================================ */
+
 const AuthServer = (() => {
 
   /* ── In-memory session store ────────────────────────────── */
-  // token → userId
   const activeSessions = {};
 
   /* ── Token helpers ──────────────────────────────────────── */
@@ -35,19 +42,20 @@ const AuthServer = (() => {
 
   /* ── Input validators ───────────────────────────────────── */
   function _validateRegister(body) {
-    if (!body)                                       return 'Request body is missing';
+    if (!body) return 'Request body is missing';
     if (!body.username || body.username.trim().length < 3)
       return 'Username must be at least 3 characters';
     if (!body.email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(body.email))
       return 'A valid email address is required';
-    if (!body.password || body.password.length < 4)  return 'Password must be at least 4 characters';
-    return null; // null = valid
+    if (!body.password || body.password.length < 4)
+      return 'Password must be at least 4 characters';
+    return null;
   }
 
   function _validateLogin(body) {
-    if (!body)                               return 'Request body is missing';
+    if (!body) return 'Request body is missing';
     if (!body.username || !body.username.trim()) return 'Username is required';
-    if (!body.password)                      return 'Password is required';
+    if (!body.password) return 'Password is required';
     return null;
   }
 
@@ -62,7 +70,7 @@ const AuthServer = (() => {
     if (DBUsers.findByEmail(msg.body.email))
       return { status: 409, ok: false, message: 'Email already registered', data: null };
 
-    const user  = DBUsers.add(msg.body);          // returns safe user (no password)
+    const user  = DBUsers.add(msg.body);
     const token = _createToken(user.id);
 
     console.log(`[AuthServer] ✓ Registered: ${user.username}`);
@@ -91,21 +99,41 @@ const AuthServer = (() => {
   /* ── Public interface ───────────────────────────────────── */
 
   /**
-   * Main entry point — called by Network when a /auth/* message arrives.
-   * @param {{ method, url, token, body }} msg
-   * @returns {{ status, ok, message, data }} response
+   * *** UPDATED: Main entry point — now ASYNC with callback ***
+   * Called by Network when a /auth/* message arrives.
+   * 
+   * @param {{ method, url, token, body }} msg - Request message
+   * @param {Function} callback - Called with response: (response) => void
+   * 
+   * Instead of returning response, we call callback(response)
    */
-  function handleRequest(msg) {
+  function handleRequest(msg, callback) {
+    // ↑ הוספנו פרמטר callback!
+    
     console.log(`[AuthServer] ${msg.method} ${msg.url}`);
+    
     try {
-      if (msg.method === 'POST' && msg.url === '/auth/register') return _register(msg);
-      if (msg.method === 'POST' && msg.url === '/auth/login')    return _login(msg);
-      if (msg.method === 'POST' && msg.url === '/auth/logout')   return _logout(msg);
-
-      return { status: 404, ok: false, message: `Auth route not found: ${msg.url}`, data: null };
+      let response;  // ← נשמור את התגובה במשתנה
+      
+      if (msg.method === 'POST' && msg.url === '/auth/register') {
+        response = _register(msg);
+      } else if (msg.method === 'POST' && msg.url === '/auth/login') {
+        response = _login(msg);
+      } else if (msg.method === 'POST' && msg.url === '/auth/logout') {
+        response = _logout(msg);
+      } else {
+        response = { status: 404, ok: false, message: `Auth route not found: ${msg.url}`, data: null };
+      }
+      
+      // ✨ במקום return - קורא ל-callback!
+      callback(response);
+      // ↑ הרשת תקבל את התגובה דרך ה-callback
+      
     } catch (e) {
       console.error('[AuthServer] Internal error:', e);
-      return { status: 500, ok: false, message: 'Internal server error', data: null };
+      const errorResponse = { status: 500, ok: false, message: 'Internal server error', data: null };
+      callback(errorResponse);
+      // ↑ גם שגיאות עוברות דרך callback
     }
   }
 
@@ -117,6 +145,7 @@ const AuthServer = (() => {
    */
   function validateToken(token) {
     return activeSessions[token] || null;
+    // ↑ זה נשאר סינכרוני - זה OK, זו פונקציה עזר פנימית
   }
 
   return { handleRequest, validateToken };

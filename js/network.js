@@ -15,19 +15,26 @@
      /expenses  → AppServer.handleRequest()
    ============================================================ */
 
+/* ============================================================
+   network.js — Simulated Network Layer (Async Version)
+   
+   *** UPDATED: Servers now use callbacks ***
+   ============================================================ */
+
 const Network = (() => {
 
   /* ── Configuration ──────────────────────────────────────── */
-  let dropRate  = 0.2;    // 20 % (valid range: 0.10 – 0.50)
-  const MIN_DELAY = 1000; // ms
-  const MAX_DELAY = 3000; // ms
+  let dropRate  = 0.2;
+  const MIN_DELAY = 1000;
+  const MAX_DELAY = 3000;
 
   /* ── Route table ────────────────────────────────────────── */
-  // Maps URL prefix strings to server handler functions.
-  // Add more servers here if needed.
   const ROUTES = {
-    '/auth':     msg => AuthServer.handleRequest(msg),
-    '/expenses': msg => AppServer.handleRequest(msg),
+    '/auth':     (msg, callback) => AuthServer.handleRequest(msg, callback),
+    // ↑ עכשיו מעביר גם callback!
+    
+    '/expenses': (msg, callback) => AppServer.handleRequest(msg, callback),
+    // ↑ עכשיו מעביר גם callback!
   };
 
   /* ── Private helpers ────────────────────────────────────── */
@@ -48,20 +55,6 @@ const Network = (() => {
 
   /* ── Public API ─────────────────────────────────────────── */
 
-  /**
-   * Send a message from client → server.
-   * Called exclusively by FXMLHttpRequest.send().
-   *
-   * @param {Object} msg  Network message envelope:
-   *   {
-   *     method   : string,          // 'GET' | 'POST' | 'PUT' | 'DELETE'
-   *     url      : string,          // e.g. '/expenses/exp_123'
-   *     token    : string|null,     // session token (may be null)
-   *     body     : Object|null,     // JSON-serialisable payload
-   *     _onload  : Function,        // success callback  (response) => void
-   *     _onerror : Function         // error  callback  (errMsg)   => void
-   *   }
-   */
   function send(msg) {
     const delay = _randomDelay();
     console.log(
@@ -90,22 +83,23 @@ const Network = (() => {
 
       console.log(`[Network] ✓ Delivering  ${msg.method} ${msg.url}`);
 
-      // Server processes request synchronously and returns a response object
-      const response = serverFn(msg);
-
-      // Phase 2 — simulate return delay (server → client)
-      setTimeout(() => {
-        console.log(`[Network] ◀ Response  status=${response.status}  ${msg.url}`);
-        if (msg._onload) msg._onload(response);
-      }, delay / 2);
+      // ✨ Server processes request ASYNCHRONOUSLY via callback
+      serverFn(msg, (response) => {
+        // ↑ השרת קורא ל-callback הזה עם התגובה
+        
+        console.log(`[Network] ✓ Received response from server: status=${response.status}`);
+        
+        // Phase 2 — simulate return delay (server → client)
+        setTimeout(() => {
+          console.log(`[Network] ◀ Response  status=${response.status}  ${msg.url}`);
+          if (msg._onload) msg._onload(response);
+        }, delay / 2);
+      });
+      // ↑ עכשיו הרשת "מקבלת" את התגובה דרך callback!
 
     }, delay);
   }
 
-  /**
-   * Change the packet drop rate at runtime.
-   * @param {number} rate  0.10 – 0.50
-   */
   function setDropRate(rate) {
     if (rate < 0.1 || rate > 0.5) {
       console.warn('[Network] Drop rate must be between 0.10 and 0.50');
@@ -115,8 +109,9 @@ const Network = (() => {
     console.log(`[Network] Drop rate → ${(dropRate * 100).toFixed(0)}%`);
   }
 
-  /** Read current drop rate */
-  function getDropRate() { return dropRate; }
+  function getDropRate() {
+    return dropRate;
+  }
 
   return { send, setDropRate, getDropRate };
 })();
