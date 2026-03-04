@@ -12,22 +12,104 @@
                     (prevents duplicate requests / race conditions)
    ============================================================ */
 
+
 /* ── App-level state ─────────────────────────────────────── */
 let sessionToken = null;
-let sessionUser  = null;
-let allExpenses  = [];
-let editingId    = null;
-let currentView  = 'all';
+let sessionUser = null;
+let allExpenses = [];
+let editingId = null;
+let currentView = 'all';
 let _searchTimer = null;
-const _pending   = new Set(); // ← Race condition protection
+const _pending = new Set(); // ← Race condition protection
+
+/* ── Cookie names ─────────────────────────────────────────── */
+const COOKIE_TOKEN = 'mw_session_token';
+const COOKIE_USER = 'mw_session_user';
+const COOKIE_USERNAME = 'mw_remember_username';
+const SESSION_DAYS = 7;  // Cookie expiration
 
 /* ============================================================
    BOOT — runs after the DOM is ready
    ============================================================ */
 document.addEventListener('DOMContentLoaded', () => {
   _registerPages();
-  SPA.navigate('auth');
+
+  // ✨ Try to restore session from cookies
+  const restored = _restoreSessionFromCookies();
+
+  if (restored) {
+    SPA.navigate('app');
+  } else {
+    SPA.navigate('auth');
+  }
 });
+
+/* ============================================================
+   SESSION MANAGEMENT WITH COOKIES
+   ============================================================ */
+
+/**
+ * Try to restore session from cookies
+ * @returns {boolean} true if session was restored
+ */
+function _restoreSessionFromCookies() {
+  const savedToken = Cookies.get(COOKIE_TOKEN);
+  const savedUserJSON = Cookies.get(COOKIE_USER);
+
+  if (savedToken && savedUserJSON) {
+    try {
+      sessionToken = savedToken;
+      sessionUser = JSON.parse(savedUserJSON);
+      console.log('[App] ✓ Session restored from cookies:', sessionUser.username);
+      return true;
+    } catch (e) {
+      console.error('[App] ✗ Failed to parse user data from cookie:', e);
+      _clearSessionCookies();
+      return false;
+    }
+  }
+
+  console.log('[App] No valid session cookies found');
+  return false;
+}
+
+/**
+ * Save session to cookies
+ * @param {boolean} remember - Whether to set expiration (7 days) or session-only
+ */
+function _saveSessionToCookies(remember) {
+  if (!sessionToken || !sessionUser) {
+    console.error('[App] Cannot save session - missing token or user');
+    return;
+  }
+
+  const days = remember ? SESSION_DAYS : null;  // null = session cookie
+
+  Cookies.set(COOKIE_TOKEN, sessionToken, days);
+  Cookies.set(COOKIE_USER, JSON.stringify(sessionUser), days);
+
+  if (remember) {
+    Cookies.set(COOKIE_USERNAME, sessionUser.username, 30);  // Remember username for 30 days
+    console.log(`[App] ✓ Session saved to cookies (expires in ${SESSION_DAYS} days)`);
+  } else {
+    Cookies.remove(COOKIE_USERNAME);  // Don't remember username if not checked
+    console.log('[App] ✓ Session saved as session-only cookie');
+  }
+}
+
+/**
+ * Clear all session cookies
+ */
+function _clearSessionCookies() {
+  Cookies.remove(COOKIE_TOKEN);
+  Cookies.remove(COOKIE_USER);
+  // Don't remove COOKIE_USERNAME - let it persist for next login
+  sessionToken = null;
+  sessionUser = null;
+  allExpenses = [];
+  _pending.clear();
+  console.log('[App] ✓ Session cookies cleared');
+}
 
 /* ============================================================
    SPA PAGE REGISTRATION
@@ -35,14 +117,14 @@ document.addEventListener('DOMContentLoaded', () => {
 function _registerPages() {
   SPA.register('auth', {
     template: '#tpl-auth',
-    onEnter:  _initAuthPage,
-    onLeave:  null
+    onEnter: _initAuthPage,
+    onLeave: null
   });
 
   SPA.register('app', {
     template: '#tpl-app',
-    onEnter:  _initAppPage,
-    onLeave:  null
+    onEnter: _initAppPage,
+    onLeave: null
   });
 }
 
@@ -68,7 +150,7 @@ function fajax(method, url, body, onSuccess, onFail) {
       if (onSuccess) onSuccess(res);
     } else {
       if (onFail) onFail(res);
-      else        toast(res.message || 'Something went wrong', 'error');
+      else toast(res.message || 'Something went wrong', 'error');
     }
   };
 
@@ -109,12 +191,19 @@ function toast(msg, type = 'success') {
    ============================================================ */
 function _initAuthPage() {
   // Wire tab buttons
-  document.getElementById('tab-login').addEventListener('click',    () => _showAuthTab('login'));
+  document.getElementById('tab-login').addEventListener('click', () => _showAuthTab('login'));
   document.getElementById('tab-register').addEventListener('click', () => _showAuthTab('register'));
 
   // Wire submit buttons
   document.getElementById('btn-login').addEventListener('click', doLogin);
   document.getElementById('btn-register').addEventListener('click', doRegister);
+
+  // ✨ Auto-fill remembered username
+  const rememberedUsername = Cookies.get(COOKIE_USERNAME);
+  if (rememberedUsername) {
+    document.getElementById('login-username').value = rememberedUsername;
+    document.getElementById('login-remember').checked = true;
+  }
 
   // Enter key submits
   document.getElementById('login-password').addEventListener('keydown', e => {
@@ -128,7 +217,7 @@ function _initAuthPage() {
 function _showAuthTab(tab) {
   document.getElementById('tab-login').classList.toggle('active', tab === 'login');
   document.getElementById('tab-register').classList.toggle('active', tab === 'register');
-  document.getElementById('form-login').style.display    = tab === 'login'    ? '' : 'none';
+  document.getElementById('form-login').style.display = tab === 'login' ? '' : 'none';
   document.getElementById('form-register').style.display = tab === 'register' ? '' : 'none';
   _setAuthMsg('');
 }
@@ -137,14 +226,19 @@ function _setAuthMsg(msg, type = '') {
   const el = document.getElementById('auth-msg');
   if (!el) return;
   el.textContent = msg;
-  el.className   = 'auth-msg' + (type ? ` ${type}` : '');
+  el.className = 'auth-msg' + (type ? ` ${type}` : '');
 }
 
 /* ── Login ────────────────────────────────────────────────── */
 function doLogin() {
   const username = document.getElementById('login-username').value.trim();
   const password = document.getElementById('login-password').value;
-  if (!username || !password) { _setAuthMsg('Please fill in all fields', 'error'); return; }
+  const remember = document.getElementById('login-remember').checked;  // ✨ Check if "Remember Me" is checked
+  
+  if (!username || !password) { 
+    _setAuthMsg('Please fill in all fields', 'error'); 
+    return; 
+  }
 
   const btn = document.getElementById('btn-login');
   btn.disabled = true;
@@ -155,8 +249,13 @@ function doLogin() {
     (res) => {
       sessionToken = res.data.token;
       sessionUser  = res.data.user;
+      
+      // ✨ Save to cookies with or without expiration
+      _saveSessionToCookies(remember);
+      
       btn.disabled = false;
       btn.innerHTML = '<span>Sign In</span>';
+      toast('Welcome back, ' + sessionUser.username + '! 👋', 'success');
       SPA.navigate('app');
     },
     (res) => {
@@ -172,7 +271,11 @@ function doRegister() {
   const username = document.getElementById('reg-username').value.trim();
   const email    = document.getElementById('reg-email').value.trim();
   const password = document.getElementById('reg-password').value;
-  if (!username || !email || !password) { _setAuthMsg('Please fill in all fields', 'error'); return; }
+  
+  if (!username || !email || !password) { 
+    _setAuthMsg('Please fill in all fields', 'error'); 
+    return; 
+  }
 
   const btn = document.getElementById('btn-register');
   btn.disabled = true;
@@ -183,8 +286,13 @@ function doRegister() {
     (res) => {
       sessionToken = res.data.token;
       sessionUser  = res.data.user;
+      
+      // ✨ Auto-save with 7 days expiration on registration
+      _saveSessionToCookies(true);
+      
       btn.disabled = false;
       btn.innerHTML = '<span>Create Account</span>';
+      toast('Account created! Welcome, ' + sessionUser.username + '! 🎉', 'success');
       SPA.navigate('app');
     },
     (res) => {
@@ -207,9 +315,9 @@ function _initAppPage() {
   document.getElementById('exp-date').value = new Date().toISOString().split('T')[0];
 
   // Nav buttons
-  document.getElementById('nav-all').addEventListener('click',    () => showView('all'));
+  document.getElementById('nav-all').addEventListener('click', () => showView('all'));
   document.getElementById('nav-unpaid').addEventListener('click', () => showView('unpaid'));
-  document.getElementById('nav-paid').addEventListener('click',   () => showView('paid'));
+  document.getElementById('nav-paid').addEventListener('click', () => showView('paid'));
 
   // Toolbar
   document.getElementById('btn-add').addEventListener('click', openModal);
@@ -235,10 +343,11 @@ function _initAppPage() {
 /* ── Logout ───────────────────────────────────────────────── */
 function doLogout() {
   fajax('POST', '/auth/logout', null, () => {});
-  sessionToken = null;
-  sessionUser  = null;
-  allExpenses  = [];
-  _pending.clear();
+  
+  // ✨ Clear session cookies
+  _clearSessionCookies();
+  
+  toast('Logged out successfully', 'warning');
   SPA.navigate('auth');
 }
 
@@ -246,9 +355,9 @@ function doLogout() {
    NAV / VIEW
    ============================================================ */
 const VIEW_CONFIG = {
-  all:    { title: 'All Expenses',  sub: 'Track and manage your spending' },
-  paid:   { title: 'Paid Expenses', sub: 'Cleared and settled transactions' },
-  unpaid: { title: 'Pending',       sub: 'Expenses awaiting payment' },
+  all: { title: 'All Expenses', sub: 'Track and manage your spending' },
+  paid: { title: 'Paid Expenses', sub: 'Cleared and settled transactions' },
+  unpaid: { title: 'Pending', sub: 'Expenses awaiting payment' },
 };
 
 function showView(view) {
@@ -260,9 +369,9 @@ function showView(view) {
   });
 
   const cfg = VIEW_CONFIG[view];
-  document.getElementById('view-title').textContent    = cfg.title;
+  document.getElementById('view-title').textContent = cfg.title;
   document.getElementById('view-subtitle').textContent = cfg.sub;
-  document.getElementById('list-title').textContent    = cfg.title;
+  document.getElementById('list-title').textContent = cfg.title;
   document.getElementById('search-input').value = '';
 
   renderList(allExpenses);
@@ -284,12 +393,12 @@ function loadExpenses() {
 
 /* ── Category config ──────────────────────────────────────── */
 const CATS = {
-  Food:      { icon: '🍔', cls: 'cat-food' },
+  Food: { icon: '🍔', cls: 'cat-food' },
   Transport: { icon: '🚗', cls: 'cat-transport' },
-  Health:    { icon: '🏥', cls: 'cat-health' },
-  Housing:   { icon: '🏠', cls: 'cat-housing' },
-  Shopping:  { icon: '🛍️', cls: 'cat-shopping' },
-  General:   { icon: '📦', cls: 'cat-general' },
+  Health: { icon: '🏥', cls: 'cat-health' },
+  Housing: { icon: '🏠', cls: 'cat-housing' },
+  Shopping: { icon: '🛍️', cls: 'cat-shopping' },
+  General: { icon: '📦', cls: 'cat-general' },
 };
 function _catInfo(cat) {
   return CATS[cat] || { icon: '💰', cls: 'cat-general' };
@@ -297,7 +406,7 @@ function _catInfo(cat) {
 
 function renderList(expenses) {
   let list = [...expenses];
-  if (currentView === 'paid')   list = list.filter(e => e.isPaid);
+  if (currentView === 'paid') list = list.filter(e => e.isPaid);
   if (currentView === 'unpaid') list = list.filter(e => !e.isPaid);
   list.sort((a, b) => new Date(b.date) - new Date(a.date));
 
@@ -314,7 +423,7 @@ function renderList(expenses) {
   }
 
   el.innerHTML = list.map(e => {
-    const ci  = _catInfo(e.category);
+    const ci = _catInfo(e.category);
     const amt = '₪' + parseFloat(e.amount).toLocaleString('he-IL', {
       minimumFractionDigits: 2, maximumFractionDigits: 2
     });
@@ -322,7 +431,7 @@ function renderList(expenses) {
       day: 'numeric', month: 'short', year: 'numeric'
     });
     const payTitle = e.isPaid ? 'Mark as pending' : 'Mark as paid';
-    const payIcon  = e.isPaid ? '↺' : '✓';
+    const payIcon = e.isPaid ? '↺' : '✓';
 
     return `
       <div class="expense-item">
@@ -358,15 +467,15 @@ function updateStats(expenses) {
   });
   const n = v => `${v} expense${v !== 1 ? 's' : ''}`;
 
-  const total  = expenses.reduce((s, e) => s + parseFloat(e.amount), 0);
-  const paid   = expenses.filter(e =>  e.isPaid);
+  const total = expenses.reduce((s, e) => s + parseFloat(e.amount), 0);
+  const paid = expenses.filter(e => e.isPaid);
   const unpaid = expenses.filter(e => !e.isPaid);
 
-  document.getElementById('stat-total').textContent        = fmt(total);
-  document.getElementById('stat-count').textContent        = n(expenses.length);
-  document.getElementById('stat-paid').textContent         = fmt(paid.reduce((s, e) => s + parseFloat(e.amount), 0));
-  document.getElementById('stat-paid-count').textContent   = n(paid.length);
-  document.getElementById('stat-unpaid').textContent       = fmt(unpaid.reduce((s, e) => s + parseFloat(e.amount), 0));
+  document.getElementById('stat-total').textContent = fmt(total);
+  document.getElementById('stat-count').textContent = n(expenses.length);
+  document.getElementById('stat-paid').textContent = fmt(paid.reduce((s, e) => s + parseFloat(e.amount), 0));
+  document.getElementById('stat-paid-count').textContent = n(paid.length);
+  document.getElementById('stat-unpaid').textContent = fmt(unpaid.reduce((s, e) => s + parseFloat(e.amount), 0));
   document.getElementById('stat-unpaid-count').textContent = n(unpaid.length);
 }
 
@@ -386,7 +495,7 @@ function handleSearch(q) {
 
   // Filter locally — instant, no FAJAX, no delay, no drops
   const filtered = allExpenses.filter(e =>
-    e.title.toLowerCase().includes(query)    ||
+    e.title.toLowerCase().includes(query) ||
     e.category.toLowerCase().includes(query) ||
     (e.description && e.description.toLowerCase().includes(query))
   );
@@ -399,13 +508,13 @@ function handleSearch(q) {
    ============================================================ */
 function openModal() {
   editingId = null;
-  document.getElementById('modal-title').textContent   = 'Add Expense';
-  document.getElementById('exp-title').value     = '';
-  document.getElementById('exp-amount').value    = '';
-  document.getElementById('exp-date').value      = new Date().toISOString().split('T')[0];
-  document.getElementById('exp-category').value  = 'Food';
-  document.getElementById('exp-paid').value      = 'false';
-  document.getElementById('exp-desc').value      = '';
+  document.getElementById('modal-title').textContent = 'Add Expense';
+  document.getElementById('exp-title').value = '';
+  document.getElementById('exp-amount').value = '';
+  document.getElementById('exp-date').value = new Date().toISOString().split('T')[0];
+  document.getElementById('exp-category').value = 'Food';
+  document.getElementById('exp-paid').value = 'false';
+  document.getElementById('exp-desc').value = '';
   document.getElementById('btn-save').textContent = 'Save Expense';
   document.getElementById('expense-modal').classList.add('open');
 }
@@ -414,13 +523,13 @@ function openEdit(id) {
   const exp = allExpenses.find(e => e.id === id);
   if (!exp) return;
   editingId = id;
-  document.getElementById('modal-title').textContent   = 'Edit Expense';
-  document.getElementById('exp-title').value     = exp.title;
-  document.getElementById('exp-amount').value    = exp.amount;
-  document.getElementById('exp-date').value      = exp.date;
-  document.getElementById('exp-category').value  = exp.category;
-  document.getElementById('exp-paid').value      = String(exp.isPaid);
-  document.getElementById('exp-desc').value      = exp.description || '';
+  document.getElementById('modal-title').textContent = 'Edit Expense';
+  document.getElementById('exp-title').value = exp.title;
+  document.getElementById('exp-amount').value = exp.amount;
+  document.getElementById('exp-date').value = exp.date;
+  document.getElementById('exp-category').value = exp.category;
+  document.getElementById('exp-paid').value = String(exp.isPaid);
+  document.getElementById('exp-desc').value = exp.description || '';
   document.getElementById('btn-save').textContent = 'Update Expense';
   document.getElementById('expense-modal').classList.add('open');
 }
@@ -431,14 +540,14 @@ function closeModal() {
 
 /* ── Save (create or update) ──────────────────────────────── */
 function saveExpense() {
-  const title    = document.getElementById('exp-title').value.trim();
-  const amount   = document.getElementById('exp-amount').value;
-  const date     = document.getElementById('exp-date').value;
+  const title = document.getElementById('exp-title').value.trim();
+  const amount = document.getElementById('exp-amount').value;
+  const date = document.getElementById('exp-date').value;
   const category = document.getElementById('exp-category').value;
-  const isPaid   = document.getElementById('exp-paid').value === 'true';
-  const desc     = document.getElementById('exp-desc').value.trim();
+  const isPaid = document.getElementById('exp-paid').value === 'true';
+  const desc = document.getElementById('exp-desc').value.trim();
 
-  if (!title)                            { toast('Please enter a title',        'warning'); return; }
+  if (!title) { toast('Please enter a title', 'warning'); return; }
   if (!amount || parseFloat(amount) < 0) { toast('Please enter a valid amount', 'warning'); return; }
 
   const btn = document.getElementById('btn-save');
