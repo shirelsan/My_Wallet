@@ -26,7 +26,18 @@ const _pending   = new Set(); // ← Race condition protection
    ============================================================ */
 document.addEventListener('DOMContentLoaded', () => {
   _registerPages();
-  SPA.navigate('auth');
+
+  // ── Cookie session check ───────────────────────────────
+  // If a valid session cookie exists (not yet expired),
+  // skip the login screen and go straight into the app.
+  const saved = CookieManager.loadSession();
+  if (saved) {
+    sessionToken = saved.token;
+    sessionUser  = saved.user;
+    SPA.navigate('app');
+  } else {
+    SPA.navigate('auth');
+  }
 });
 
 /* ============================================================
@@ -155,6 +166,7 @@ function doLogin() {
     (res) => {
       sessionToken = res.data.token;
       sessionUser  = res.data.user;
+      CookieManager.saveSession(sessionToken, sessionUser); // ← save cookie
       btn.disabled = false;
       btn.innerHTML = '<span>Sign In</span>';
       SPA.navigate('app');
@@ -183,6 +195,7 @@ function doRegister() {
     (res) => {
       sessionToken = res.data.token;
       sessionUser  = res.data.user;
+      CookieManager.saveSession(sessionToken, sessionUser); // ← save cookie
       btn.disabled = false;
       btn.innerHTML = '<span>Create Account</span>';
       SPA.navigate('app');
@@ -207,9 +220,10 @@ function _initAppPage() {
   document.getElementById('exp-date').value = new Date().toISOString().split('T')[0];
 
   // Nav buttons
-  document.getElementById('nav-all').addEventListener('click',    () => showView('all'));
-  document.getElementById('nav-unpaid').addEventListener('click', () => showView('unpaid'));
-  document.getElementById('nav-paid').addEventListener('click',   () => showView('paid'));
+  document.getElementById('nav-all').addEventListener('click',     () => showView('all'));
+  document.getElementById('nav-unpaid').addEventListener('click',  () => showView('unpaid'));
+  document.getElementById('nav-paid').addEventListener('click',    () => showView('paid'));
+  document.getElementById('nav-profile').addEventListener('click', () => showView('profile'));
 
   // Toolbar
   document.getElementById('btn-add').addEventListener('click', openModal);
@@ -235,6 +249,7 @@ function _initAppPage() {
 /* ── Logout ───────────────────────────────────────────────── */
 function doLogout() {
   fajax('POST', '/auth/logout', null, () => {});
+  CookieManager.clearSession(); // ← clear cookie on logout
   sessionToken = null;
   sessionUser  = null;
   allExpenses  = [];
@@ -246,26 +261,36 @@ function doLogout() {
    NAV / VIEW
    ============================================================ */
 const VIEW_CONFIG = {
-  all:    { title: 'All Expenses',  sub: 'Track and manage your spending' },
-  paid:   { title: 'Paid Expenses', sub: 'Cleared and settled transactions' },
-  unpaid: { title: 'Pending',       sub: 'Expenses awaiting payment' },
+  all:     { title: 'All Expenses',   sub: 'Track and manage your spending' },
+  paid:    { title: 'Paid Expenses',  sub: 'Cleared and settled transactions' },
+  unpaid:  { title: 'Pending',        sub: 'Expenses awaiting payment' },
+  profile: { title: 'My Profile',     sub: 'Your account details and statistics' },
 };
 
 function showView(view) {
   currentView = view;
 
-  // Update nav active state
-  ['all', 'unpaid', 'paid'].forEach(v => {
+  // Update nav active state (all 4 nav items)
+  ['all', 'unpaid', 'paid', 'profile'].forEach(v => {
     document.getElementById(`nav-${v}`).classList.toggle('active', v === view);
   });
 
   const cfg = VIEW_CONFIG[view];
   document.getElementById('view-title').textContent    = cfg.title;
   document.getElementById('view-subtitle').textContent = cfg.sub;
-  document.getElementById('list-title').textContent    = cfg.title;
-  document.getElementById('search-input').value = '';
 
-  renderList(allExpenses);
+  // Show/hide the two panels
+  const isProfile = view === 'profile';
+  document.getElementById('expenses-panel').style.display = isProfile ? 'none' : '';
+  document.getElementById('profile-view').style.display   = isProfile ? ''     : 'none';
+
+  if (isProfile) {
+    renderProfile();
+  } else {
+    document.getElementById('list-title').textContent = cfg.title;
+    document.getElementById('search-input').value = '';
+    renderList(allExpenses);
+  }
 }
 
 /* ============================================================
@@ -526,4 +551,170 @@ function deleteExpense(id) {
       toast(res.message || 'Failed to delete. Please retry.', 'error');
     }
   );
+}
+
+/* ============================================================
+   PROFILE PAGE
+   Renders user info + statistics + two hand-drawn charts.
+   All data comes from the local allExpenses array (no network).
+   ============================================================ */
+
+/* ── Category colours (donut slices) ─────────────────────── */
+const CAT_COLORS = {
+  Food:      '#ff7d3b',
+  Transport: '#1e6fff',
+  Health:    '#f04b4b',
+  Housing:   '#00c07a',
+  Shopping:  '#a855f7',
+  General:   '#8a95a3',
+};
+
+function renderProfile() {
+  const user     = sessionUser;
+  const expenses = allExpenses;
+
+  /* ── User info ────────────────────────────────────────── */
+  document.getElementById('profile-avatar').textContent = user.username[0].toUpperCase();
+  document.getElementById('profile-name').textContent   = user.username;
+  document.getElementById('profile-email').textContent  = user.email || '—';
+
+  // createdAt comes from DBUsers — find via the stored user object
+  const rawUser = DBUsers.findById(user.id);
+  if (rawUser && rawUser.createdAt) {
+    const since = new Date(rawUser.createdAt).toLocaleDateString('en-GB', {
+      day: 'numeric', month: 'long', year: 'numeric'
+    });
+    document.getElementById('profile-since').textContent = `Member since ${since}`;
+  }
+
+  /* ── Stats numbers ────────────────────────────────────── */
+  const total  = expenses.reduce((s, e) => s + parseFloat(e.amount), 0);
+  const paid   = expenses.filter(e => e.isPaid);
+  const paidPct = expenses.length ? Math.round((paid.length / expenses.length) * 100) : 0;
+  const avg    = expenses.length ? total / expenses.length : 0;
+
+  const fmtIL = v => '₪' + v.toLocaleString('he-IL', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+
+  document.getElementById('ps-total-amount').textContent = fmtIL(total);
+  document.getElementById('ps-total-count').textContent  = expenses.length;
+  document.getElementById('ps-paid-pct').textContent     = paidPct + '%';
+  document.getElementById('ps-avg').textContent          = fmtIL(avg);
+
+  /* ── Charts ───────────────────────────────────────────── */
+  _renderDonut(expenses, fmtIL);
+  _renderBarChart(expenses, fmtIL);
+}
+
+/* ── Donut chart — spending by category ──────────────────── */
+function _renderDonut(expenses, fmtIL) {
+  const canvas = document.getElementById('chart-donut');
+  const legend = document.getElementById('donut-legend');
+  if (!canvas) return;
+
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  const cx = W / 2, cy = H / 2;
+  const radius = 85, inner = 50;
+
+  // Aggregate by category
+  const totals = {};
+  expenses.forEach(e => {
+    totals[e.category] = (totals[e.category] || 0) + parseFloat(e.amount);
+  });
+
+  const grand = Object.values(totals).reduce((s, v) => s + v, 0);
+  const entries = Object.entries(totals).sort((a, b) => b[1] - a[1]);
+
+  // Clear
+  ctx.clearRect(0, 0, W, H);
+
+  if (grand === 0) {
+    ctx.fillStyle = '#eaecf0';
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+    ctx.arc(cx, cy, inner, 0, Math.PI * 2, true);
+    ctx.fill();
+    legend.innerHTML = '<div style="color:var(--gray-500);font-size:.82rem">No data yet</div>';
+    return;
+  }
+
+  // Draw slices
+  let startAngle = -Math.PI / 2;
+  entries.forEach(([cat, val]) => {
+    const slice = (val / grand) * Math.PI * 2;
+    const color = CAT_COLORS[cat] || '#8a95a3';
+
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.arc(cx, cy, radius, startAngle, startAngle + slice);
+    ctx.closePath();
+    ctx.fillStyle = color;
+    ctx.fill();
+
+    // Thin gap between slices
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.arc(cx, cy, radius, startAngle, startAngle + slice);
+    ctx.closePath();
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    startAngle += slice;
+  });
+
+  // Donut hole
+  ctx.beginPath();
+  ctx.arc(cx, cy, inner, 0, Math.PI * 2);
+  ctx.fillStyle = '#fff';
+  ctx.fill();
+
+  // Center label
+  ctx.fillStyle = '#1a2030';
+  ctx.font = 'bold 13px Nunito, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(fmtIL(grand), cx, cy);
+
+  // Legend
+  legend.innerHTML = entries.map(([cat, val]) => `
+    <div class="legend-item">
+      <span class="legend-dot" style="background:${CAT_COLORS[cat] || '#8a95a3'}"></span>
+      <span>${cat}</span>
+      <span class="legend-pct">${Math.round((val / grand) * 100)}%</span>
+    </div>
+  `).join('');
+}
+
+/* ── Bar chart — top 5 expenses ──────────────────────────── */
+function _renderBarChart(expenses, fmtIL) {
+  const container = document.getElementById('bar-chart');
+  if (!container) return;
+
+  if (expenses.length === 0) {
+    container.innerHTML = '<div class="empty-state" style="padding:2rem"><div class="empty-icon">📊</div><p>No expenses yet</p></div>';
+    return;
+  }
+
+  // Sort by amount descending, take top 5
+  const top5 = [...expenses]
+    .sort((a, b) => parseFloat(b.amount) - parseFloat(a.amount))
+    .slice(0, 5);
+
+  const max = parseFloat(top5[0].amount);
+
+  container.innerHTML = top5.map(e => {
+    const pct  = Math.round((parseFloat(e.amount) / max) * 100);
+    const ci   = _catInfo(e.category);
+    return `
+      <div class="bar-row">
+        <div class="bar-label" title="${e.title}">
+          ${ci.icon} ${e.title}
+        </div>
+        <div class="bar-track">
+          <div class="bar-fill" style="width:${pct}%"></div>
+        </div>
+        <div class="bar-amount">${fmtIL(parseFloat(e.amount))}</div>
+      </div>`;
+  }).join('');
 }
