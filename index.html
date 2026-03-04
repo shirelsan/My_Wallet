@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>My Wallet - Personal Expense Tracker</title>
+  <title>My Wallet — Personal Expense Tracker</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link
     href="https://fonts.googleapis.com/css2?family=Nunito:wght@300;400;500;600;700;800;900&family=Playfair+Display:wght@700;800&display=swap"
@@ -35,10 +35,7 @@
       <div class="auth-card">
 
         <div class="auth-logo">
-          <!-- <div class="auth-logo-icon">💳</div>   -->
-          <div class="auth-logo-icon">
-            <img src="logo.png" alt="My Wallet" style="width:110px; height:110px; object-fit:contain;" />
-          </div>
+          <div class="auth-logo-icon">💳</div>
           <h1>My Wallet</h1>
           <p>Personal expense tracker</p>
         </div>
@@ -112,10 +109,7 @@
       <!-- ── Sidebar ──────────────────────────────────────── -->
       <nav class="sidebar">
         <div class="sidebar-logo">
-          <div class="sidebar-logo-icon">
-            <img src="logo.png" alt="My Wallet" style="width:90px; height:90px; object-fit:contain;" />
-          </div>
-
+          <div class="sidebar-logo-icon">💳</div>
           <span>My Wallet</span>
         </div>
 
@@ -135,6 +129,9 @@
         </button>
         <button class="nav-item" id="nav-paid">
           <span class="nav-icon">✅</span> Paid
+        </button>
+        <button class="nav-item" id="nav-profile">
+          <span class="nav-icon">👤</span> My Profile
         </button>
 
         <div class="sidebar-bottom">
@@ -176,7 +173,8 @@
           </div>
         </div>
 
-        <!-- Expense list -->
+        <!-- Expense list panel (hidden when profile is active) -->
+        <div id="expenses-panel">
         <div class="section-card">
           <div class="section-header">
             <h3 id="list-title">All Expenses</h3>
@@ -195,6 +193,68 @@
             </div>
           </div>
         </div>
+        </div><!-- /#expenses-panel -->
+
+        <!-- ── Profile view (hidden by default) ─────────────── -->
+        <div id="profile-view" style="display:none">
+
+          <!-- User info card -->
+          <div class="section-card profile-card">
+            <div class="profile-header">
+              <div class="profile-avatar" id="profile-avatar">?</div>
+              <div>
+                <div class="profile-name"    id="profile-name">—</div>
+                <div class="profile-email"   id="profile-email">—</div>
+                <div class="profile-since"   id="profile-since">—</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Stats grid -->
+          <div class="profile-stats-grid">
+            <div class="profile-stat-card">
+              <div class="ps-icon">💸</div>
+              <div class="ps-value" id="ps-total-amount">₪0</div>
+              <div class="ps-label">Total Spent</div>
+            </div>
+            <div class="profile-stat-card">
+              <div class="ps-icon">🧾</div>
+              <div class="ps-value" id="ps-total-count">0</div>
+              <div class="ps-label">Transactions</div>
+            </div>
+            <div class="profile-stat-card">
+              <div class="ps-icon">✅</div>
+              <div class="ps-value" id="ps-paid-pct">0%</div>
+              <div class="ps-label">Paid Rate</div>
+            </div>
+            <div class="profile-stat-card">
+              <div class="ps-icon">📅</div>
+              <div class="ps-value" id="ps-avg">₪0</div>
+              <div class="ps-label">Avg per Expense</div>
+            </div>
+          </div>
+
+          <!-- Charts row -->
+          <div class="charts-row">
+
+            <!-- Donut chart — by category -->
+            <div class="section-card chart-card">
+              <div class="chart-title">Spending by Category</div>
+              <div class="donut-wrap">
+                <canvas id="chart-donut" width="220" height="220"></canvas>
+                <div class="donut-legend" id="donut-legend"></div>
+              </div>
+            </div>
+
+            <!-- Bar chart — top 5 expenses -->
+            <div class="section-card chart-card">
+              <div class="chart-title">Top 5 Expenses</div>
+              <div class="bar-chart" id="bar-chart"></div>
+            </div>
+
+          </div><!-- /.charts-row -->
+
+        </div><!-- /#profile-view -->
 
       </main><!-- /.main -->
 
@@ -261,14 +321,16 @@
 
   <!-- ══════════════════════════════════════════════════════════
        SCRIPTS — load order matters!
-       1. dbApi.js        — LocalStorage DB (no dependencies)
-       2. authServer.js   — needs DBUsers  (from dbApi.js)
-       3. appServer.js    — needs DBExpenses + AuthServer
-       4. network.js      — needs AuthServer + AppServer
-       5. fajax.js        — needs Network
-       6. spa.js          — standalone router
-       7. app.js          — needs everything above
+       1. cookieManager.js — Cookie session (no dependencies)
+       2. dbApi.js         — LocalStorage DB (no dependencies)
+       3. authServer.js    — needs DBUsers  (from dbApi.js)
+       4. appServer.js     — needs DBExpenses + AuthServer
+       5. network.js       — needs AuthServer + AppServer
+       6. fajax.js         — needs Network
+       7. spa.js           — standalone router
+       8. app.js           — needs everything above
   ══════════════════════════════════════════════════════════ -->
+  <script src="js/cookie.js"></script>
   <script src="js/dbApi.js"></script>
   <script src="js/authServer.js"></script>
   <script src="js/appServer.js"></script>
