@@ -60,7 +60,7 @@
               autocomplete="current-password" />
           </div>
 
-          <!-- ✨ NEW: Remember Me Checkbox -->
+          <!-- ✨ Remember Me Checkbox -->
           <div class="form-group remember-me">
             <label class="checkbox-label">
               <input type="checkbox" id="login-remember" class="checkbox-input" />
@@ -320,16 +320,28 @@
 
 
   <!-- ══════════════════════════════════════════════════════════
-       SCRIPTS — load order matters!
-       1. cookieManager.js — Cookie session (no dependencies)
-       2. dbApi.js         — LocalStorage DB (no dependencies)
-       3. authServer.js    — needs DBUsers  (from dbApi.js)
-       4. appServer.js     — needs DBExpenses + AuthServer
-       5. network.js       — needs AuthServer + AppServer
-       6. fajax.js         — needs Network
-       7. spa.js           — standalone router
-       8. app.js           — needs everything above
+       SCRIPTS — NEW LOAD ORDER!
+       
+       Backend / Infrastructure:
+       1. cookie.js         — Cookie session manager
+       2. dbApi.js          — LocalStorage database
+       3. authServer.js     — Auth endpoints
+       4. appServer.js      — App endpoints
+       5. network.js        — Network layer
+       6. fajax.js          — Fake AJAX
+       7. spa.js            — SPA router
+       8. cookies.js        — Cookie utilities
+       
+       Frontend / UI Modules:
+       9. auth-ui.js        — Auth page UI
+       10. expenses-ui.js   — Expenses management UI
+       11. profile-ui.js    — Profile page UI
+       
+       Main App:
+       12. app.js           — Application orchestrator
   ══════════════════════════════════════════════════════════ -->
+  
+  <!-- Backend -->
   <script src="js/cookie.js"></script>
   <script src="js/dbApi.js"></script>
   <script src="js/authServer.js"></script>
@@ -338,6 +350,13 @@
   <script src="js/fajax.js"></script>
   <script src="js/spa.js"></script>
   <script src="js/cookies.js"></script>
+  
+  <!-- Frontend UI Modules -->
+  <script src="js/auth-ui.js"></script>
+  <script src="js/expenses-ui.js"></script>
+  <script src="js/profile-ui.js"></script>
+  
+  <!-- Main App -->
   <script src="js/app.js"></script>
 
 </body>
