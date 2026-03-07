@@ -1,5 +1,5 @@
 
-
+/// cookies.js — Cookie management for session persistence
 const CookieManager = (() => {
 
   const SESSION_HOURS = 1;   
@@ -7,7 +7,7 @@ const CookieManager = (() => {
   const TOKEN_KEY = 'mw_token';
   const USER_KEY  = 'mw_user';
 
-
+// Internal helper to set a cookie with expiration
   function _set(name, value, hours) {
     const expires = new Date();
     expires.setTime(expires.getTime() + hours * 60 * 60 * 1000);
@@ -18,7 +18,7 @@ const CookieManager = (() => {
       `; SameSite=Strict`;
   }
 
-
+// Internal helper to get a cookie value by name
   function _get(name) {
     const cookies = document.cookie.split(';');
     for (const cookie of cookies) {
@@ -28,7 +28,7 @@ const CookieManager = (() => {
     return null;
   }
 
-
+// Internal helper to remove a cookie
   function _remove(name) {
     document.cookie =
       `${name}=` +
@@ -36,12 +36,14 @@ const CookieManager = (() => {
       `; path=/`;
   }
 
+// Saves the session data (token and user) to cookies
   function saveSession(token, user) {
     _set(TOKEN_KEY, token,                SESSION_HOURS);
     _set(USER_KEY,  JSON.stringify(user), SESSION_HOURS);
     console.log(`[CookieManager] Session saved — expires in ${SESSION_HOURS}h`);
   }
 
+  // Loads session data from cookies, returns { token, user } or null if not found/invalid
   function loadSession() {
     const token   = _get(TOKEN_KEY);
     const userRaw = _get(USER_KEY);
@@ -59,7 +61,7 @@ const CookieManager = (() => {
     }
   }
 
-
+// Clears the session cookies
   function clearSession() {
     _remove(TOKEN_KEY);
     _remove(USER_KEY);

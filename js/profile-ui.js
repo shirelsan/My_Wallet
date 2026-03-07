@@ -1,6 +1,5 @@
 /* ============================================================
    profile-ui.js — Profile Page & Charts
-   Handles user profile display and visualization
    ============================================================ */
 
 const ProfileUI = (() => {

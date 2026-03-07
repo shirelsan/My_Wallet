@@ -1,48 +1,29 @@
 /* ============================================================
    authServer.js — Authentication Server
-   Handles all requests routed to  /auth/*
-
-   Endpoints:
-     POST /auth/register  → register a new user
-     POST /auth/login     → login an existing user
-     POST /auth/logout    → invalidate session token
-
-   Response envelope (all responses):
-     { status: number, ok: boolean, message: string, data: any }
-
-   Session tokens are kept in an in-memory Map:
-     activeSessions: token → userId
-   The appServer (appServer.js) calls  AuthServer.validateToken()
-   to authenticate every expense request.
-   ============================================================ */
-
-/* ============================================================
-   authServer.js — Authentication Server (Async Version)
-   
-   *** UPDATED: Now uses callbacks for async communication ***
-   
-   handleRequest(msg, callback) - callback receives response
    ============================================================ */
 
 const AuthServer = (() => {
 
-  /* ── In-memory session store ────────────────────────────── */
+  // In-memory map of active session tokens to user IDs
   const activeSessions = {};
 
-  /* ── Token helpers ──────────────────────────────────────── */
+
+  // Create a new session token for a user
   function _createToken(userId) {
     const token = `tok_${userId}_${Date.now()}`;
     activeSessions[token] = userId;
     return token;
   }
 
+  // Delete a session (used when logging out)
   function _destroyToken(token) {
     delete activeSessions[token];
   }
 
-  /* ── Input validators ───────────────────────────────────── */
+  // Make sure registration data is valid
   function _validateRegister(body) {
-    if (!body) return 'Request body is missing';
+    if (!body)
+      return 'Request body is missing';
     if (!body.username || body.username.trim().length < 3)
       return 'Username must be at least 3 characters';
     if (!body.email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(body.email))
@@ -52,6 +33,7 @@ const AuthServer = (() => {
     return null;
   }
 
+  // Make sure login data is valid
   function _validateLogin(body) {
     if (!body) return 'Request body is missing';
     if (!body.username || !body.username.trim()) return 'Username is required';
@@ -60,27 +42,35 @@ const AuthServer = (() => {
   }
 
   /* ── Route handlers ─────────────────────────────────────── */
+
+  // Handle user registration
   function _register(msg) {
+
+    // Validate input
     const err = _validateRegister(msg.body);
     if (err) return { status: 400, ok: false, message: err, data: null };
 
+    // Check for duplicates
     if (DBUsers.findByUsername(msg.body.username))
       return { status: 409, ok: false, message: 'Username already taken', data: null };
 
     if (DBUsers.findByEmail(msg.body.email))
       return { status: 409, ok: false, message: 'Email already registered', data: null };
 
-    const user  = DBUsers.add(msg.body);
+    //  create the user
+    const user = DBUsers.add(msg.body);
     const token = _createToken(user.id);
 
     console.log(`[AuthServer] ✓ Registered: ${user.username}`);
     return { status: 201, ok: true, message: 'Registration successful', data: { user, token } };
   }
 
+  // Handle user login
   function _login(msg) {
     const err = _validateLogin(msg.body);
     if (err) return { status: 400, ok: false, message: err, data: null };
 
+    // Check credentials
     const user = DBUsers.validateCredentials(msg.body.username, msg.body.password);
     if (!user)
       return { status: 401, ok: false, message: 'Invalid username or password', data: null };
@@ -91,30 +81,20 @@ const AuthServer = (() => {
     return { status: 200, ok: true, message: 'Login successful', data: { user, token } };
   }
 
+
   function _logout(msg) {
     if (msg.token) _destroyToken(msg.token);
     return { status: 200, ok: true, message: 'Logged out', data: null };
   }
 
-  /* ── Public interface ───────────────────────────────────── */
-
-  /**
-   * *** UPDATED: Main entry point — now ASYNC with callback ***
-   * Called by Network when a /auth/* message arrives.
-   * 
-   * @param {{ method, url, token, body }} msg - Request message
-   * @param {Function} callback - Called with response: (response) => void
-   * 
-   * Instead of returning response, we call callback(response)
-   */
+  // Main request handler for the AuthServer
   function handleRequest(msg, callback) {
-    // ↑ הוספנו פרמטר callback!
-    
     console.log(`[AuthServer] ${msg.method} ${msg.url}`);
-    
+
     try {
-      let response;  // ← נשמור את התגובה במשתנה
-      
+      let response;
+
+      // Route to the right handler based on URL
       if (msg.method === 'POST' && msg.url === '/auth/register') {
         response = _register(msg);
       } else if (msg.method === 'POST' && msg.url === '/auth/login') {
@@ -124,28 +104,20 @@ const AuthServer = (() => {
       } else {
         response = { status: 404, ok: false, message: `Auth route not found: ${msg.url}`, data: null };
       }
-      
-      // ✨ במקום return - קורא ל-callback!
+
+      // Send response back through callback
       callback(response);
-      // ↑ הרשת תקבל את התגובה דרך ה-callback
-      
+
     } catch (e) {
       console.error('[AuthServer] Internal error:', e);
       const errorResponse = { status: 500, ok: false, message: 'Internal server error', data: null };
       callback(errorResponse);
-      // ↑ גם שגיאות עוברות דרך callback
     }
   }
 
-  /**
-   * Validate a session token.
-   * Called by appServer.js for every expense request.
-   * @param {string} token
-   * @returns {string|null} userId if valid, null otherwise
-   */
+  // Validate a session token and return the associated user ID, or null if invalid
   function validateToken(token) {
     return activeSessions[token] || null;
-    // ↑ זה נשאר סינכרוני - זה OK, זו פונקציה עזר פנימית
   }
 
   return { handleRequest, validateToken };

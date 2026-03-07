@@ -1,27 +1,5 @@
 /* ============================================================
    appServer.js — Expenses Application Server
-   Handles all requests routed to  /expenses/*
-
-   Every request MUST carry a valid session token.
-   Token validation is delegated to AuthServer.validateToken().
-
-   REST API:
-     GET    /expenses              → list all expenses (current user)
-     GET    /expenses/:id          → get one expense
-     GET    /expenses/search?q=…   → search expenses
-     POST   /expenses              → create new expense
-     PUT    /expenses/:id          → update expense
-     PUT    /expenses/:id/pay      → toggle paid/unpaid
-     DELETE /expenses/:id          → delete expense
-
-   Response envelope:
-     { status: number, ok: boolean, message: string, data: any }
-   ============================================================ */
-
-/* ============================================================
-   appServer.js — Expenses Application Server (Async Version)
-   
-   *** UPDATED: Now uses callbacks for async communication ***
    ============================================================ */
 
 const AppServer = (() => {
@@ -109,15 +87,8 @@ const AppServer = (() => {
 
   /* ── Public interface ───────────────────────────────────── */
 
-  /**
-   * *** UPDATED: Main entry point — now ASYNC with callback ***
-   * Called by Network when a /expenses/* message arrives.
-   * 
-   * @param {{ method, url, token, body }} msg - Request message
-   * @param {Function} callback - Called with response: (response) => void
-   */
+
   function handleRequest(msg, callback) {
-    // ↑ הוספנו פרמטר callback!
     
     console.log(`[AppServer] ${msg.method} ${msg.url}`);
 
@@ -125,7 +96,6 @@ const AppServer = (() => {
     const userId = _auth(msg.token);
     if (!userId) {
       callback(_unauthorized());
-      // ↑ במקום return - קורא ל-callback
       return;
     }
 
@@ -133,7 +103,7 @@ const AppServer = (() => {
     const { id, action } = _parseUrl(msg.url);
 
     try {
-      let response;  // ← נשמור את התגובה
+      let response;  
       
       // Special routes
       if (msg.method === 'GET' && id === 'search') {
@@ -160,7 +130,6 @@ const AppServer = (() => {
         }
       }
       
-      // ✨ במקום return - קורא ל-callback!
       callback(response);
       
     } catch (e) {

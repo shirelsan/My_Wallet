@@ -1,11 +1,10 @@
 /* ============================================================
    auth-ui.js — Authentication UI Logic
-   Handles login, register, and logout functionality
    ============================================================ */
 
 const AuthUI = (() => {
 
-  /* ── Init auth page ─────────────────────────────────────── */
+
   function init() {
     // Wire tab buttons
     document.getElementById('tab-login').addEventListener('click', () => showTab('login'));
@@ -31,7 +30,6 @@ const AuthUI = (() => {
     });
   }
 
-  /* ── Tab switcher ───────────────────────────────────────── */
   function showTab(tab) {
     document.getElementById('tab-login').classList.toggle('active', tab === 'login');
     document.getElementById('tab-register').classList.toggle('active', tab === 'register');
@@ -40,7 +38,6 @@ const AuthUI = (() => {
     setMessage('');
   }
 
-  /* ── Auth message ───────────────────────────────────────── */
   function setMessage(msg, type = '') {
     const el = document.getElementById('auth-msg');
     if (!el) return;
@@ -48,7 +45,7 @@ const AuthUI = (() => {
     el.className = 'auth-msg' + (type ? ` ${type}` : '');
   }
 
-  /* ── Login ──────────────────────────────────────────────── */
+  // Login logic
   function doLogin() {
     const username = document.getElementById('login-username').value.trim();
     const password = document.getElementById('login-password').value;
@@ -64,6 +61,7 @@ const AuthUI = (() => {
     btn.innerHTML = '<span class="spinner"></span> Signing in…';
     setMessage('Connecting…', 'pending');
 
+    
     App.request('POST', '/auth/login', { username, password },
       (res) => {
         App.setSession(res.data.token, res.data.user, remember);
@@ -80,7 +78,7 @@ const AuthUI = (() => {
     );
   }
 
-  /* ── Register ───────────────────────────────────────────── */
+  // Registration logic
   function doRegister() {
     const username = document.getElementById('reg-username').value.trim();
     const email    = document.getElementById('reg-email').value.trim();
@@ -112,7 +110,7 @@ const AuthUI = (() => {
     );
   }
 
-  /* ── Logout ─────────────────────────────────────────────── */
+  // Logout function to be called from the app page
   function doLogout() {
     App.request('POST', '/auth/logout', null, () => {});
     App.clearSession();
