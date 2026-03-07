@@ -1,117 +1,128 @@
 /* ============================================================
    network.js — Simulated Network Layer
-
-   Responsibilities:
-     1. Receive messages from FAJAX (client → server direction)
-     2. Apply a random delay  (MIN_DELAY … MAX_DELAY ms)
-     3. Randomly drop messages at a configurable drop-rate
-     4. Route surviving messages to the correct server
-        based on the URL prefix in the message
-     5. Deliver the server's synchronous response back to the
-        originating FAJAX callback after another short delay
-
-   Route table (URL prefix → server):
-     /auth      → AuthServer.handleRequest()
-     /expenses  → AppServer.handleRequest()
-   ============================================================ */
-
-/* ============================================================
-   network.js — Simulated Network Layer (Async Version)
    
-   *** UPDATED: Servers now use callbacks ***
+   Simulates realistic network behavior with:
+   - Random delays (1-3 seconds as per project requirements)
+   - Packet drops (10-50% configurable rate)
+   - Asynchronous message delivery
+   - Server routing
    ============================================================ */
 
-const Network = (() => {
-
-  /* ── Configuration ──────────────────────────────────────── */
-  let dropRate  = 0.2;
-  const MIN_DELAY = 1000;
-  const MAX_DELAY = 3000;
-
-  /* ── Route table ────────────────────────────────────────── */
-  const ROUTES = {
-    '/auth':     (msg, callback) => AuthServer.handleRequest(msg, callback),
-    // ↑ עכשיו מעביר גם callback!
+class Network {
+  constructor() {
+    // Initialize servers with their database APIs
+    this.authServer = AuthServer;      // Authentication server
+    this.appServer = AppServer;         // Application (expenses) server
     
-    '/expenses': (msg, callback) => AppServer.handleRequest(msg, callback),
-    // ↑ עכשיו מעביר גם callback!
-  };
-
-  /* ── Private helpers ────────────────────────────────────── */
-  function _randomDelay() {
-    return Math.floor(Math.random() * (MAX_DELAY - MIN_DELAY + 1)) + MIN_DELAY;
+    // Network configuration (per project requirements)
+    this.dropRate = 0.2;     // 20% packet drop rate (10-50% allowed)
+    this.minDelay = 1000;    // Minimum delay: 1 second
+    this.maxDelay = 3000;    // Maximum delay: 3 seconds
   }
 
-  function _shouldDrop() {
-    return Math.random() < dropRate;
-  }
-
-  function _findServer(url) {
-    for (const prefix of Object.keys(ROUTES)) {
-      if (url.startsWith(prefix)) return ROUTES[prefix];
-    }
-    return null;
-  }
-
-  /* ── Public API ─────────────────────────────────────────── */
-
-  function send(msg) {
-    const delay = _randomDelay();
+  /* Send message through network
+     Simulates:
+     1. Network delay (client → server)
+     2. Possible packet drop
+     3. Server routing and processing
+     4. Network delay (server → client)
+     
+     Parameters:
+       msg - Request object with method, url, token, body
+       onSuccess - Callback for successful delivery
+       onError - Callback for network errors
+  */
+  send(msg, onSuccess, onError) {
+    const delay = this._randomDelay();
+    
     console.log(
       `[Network] ▶ ${msg.method} ${msg.url}` +
-      `  delay=${delay}ms  dropRate=${(dropRate * 100).toFixed(0)}%`
+      `  delay=${delay}ms  dropRate=${(this.dropRate * 100).toFixed(0)}%`
     );
 
-    // Phase 1 — simulate transit delay (client → server)
+    // Phase 1: Simulate network delay (client → server)
     setTimeout(() => {
 
-      // ── Drop? ──────────────────────────────────────────────
-      if (_shouldDrop()) {
+      // Check if packet should be dropped
+      if (this._shouldDrop()) {
         console.warn(`[Network] ✗ DROPPED  ${msg.method} ${msg.url}`);
-        if (msg._onerror) msg._onerror('Network error: packet dropped');
+        if (onError) onError('Network error: packet dropped. Please retry.');
         return;
       }
 
-      // ── Route to server ────────────────────────────────────
-      const serverFn = _findServer(msg.url);
-      if (!serverFn) {
+      // Route to correct server
+      const server = this._findServer(msg.url);
+      if (!server) {
         console.error(`[Network] ✗ No route for URL: ${msg.url}`);
-        const res = { status: 404, ok: false, message: `No server found for ${msg.url}` };
-        if (msg._onload) msg._onload(res);
+        if (onError) onError(`No server found for ${msg.url}`);
         return;
       }
 
       console.log(`[Network] ✓ Delivering  ${msg.method} ${msg.url}`);
 
-      // ✨ Server processes request ASYNCHRONOUSLY via callback
-      serverFn(msg, (response) => {
-        // ↑ השרת קורא ל-callback הזה עם התגובה
+      // Server processes request (async with callback)
+      server.handleRequest(msg, (response) => {
+        console.log(`[Network] ✓ Server response: status=${response.status}`);
         
-        console.log(`[Network] ✓ Received response from server: status=${response.status}`);
-        
-        // Phase 2 — simulate return delay (server → client)
+        // Phase 2: Simulate network delay (server → client)
         setTimeout(() => {
-          console.log(`[Network] ◀ Response  status=${response.status}  ${msg.url}`);
-          if (msg._onload) msg._onload(response);
+          console.log(`[Network] ◀ Response delivered  ${msg.url}`);
+          if (onSuccess) onSuccess(response);
         }, delay / 2);
       });
-      // ↑ עכשיו הרשת "מקבלת" את התגובה דרך callback!
 
     }, delay);
   }
 
-  function setDropRate(rate) {
+  /* ── Private helper methods ──────────────────────────── */
+
+  // Generate random delay between min and max
+  _randomDelay() {
+    return Math.floor(
+      Math.random() * (this.maxDelay - this.minDelay + 1)
+    ) + this.minDelay;
+  }
+
+  // Determine if packet should be dropped
+  _shouldDrop() {
+    return Math.random() < this.dropRate;
+  }
+
+  // Find which server handles this URL
+  _findServer(url) {
+    if (url.startsWith('/auth')) return this.authServer;
+    if (url.startsWith('/expenses')) return this.appServer;
+    return null;
+  }
+
+  /* ── Public configuration methods ────────────────────── */
+
+  // Change packet drop rate (must be between 0.1 and 0.5)
+  setDropRate(rate) {
     if (rate < 0.1 || rate > 0.5) {
       console.warn('[Network] Drop rate must be between 0.10 and 0.50');
       return;
     }
-    dropRate = rate;
-    console.log(`[Network] Drop rate → ${(dropRate * 100).toFixed(0)}%`);
+    this.dropRate = rate;
+    console.log(`[Network] Drop rate → ${(this.dropRate * 100).toFixed(0)}%`);
   }
 
-  function getDropRate() {
-    return dropRate;
+  // Get current drop rate
+  getDropRate() {
+    return this.dropRate;
   }
 
-  return { send, setDropRate, getDropRate };
-})();
+  // Set custom delay range
+  setDelayRange(min, max) {
+    if (min < 0 || max < min) {
+      console.warn('[Network] Invalid delay range');
+      return;
+    }
+    this.minDelay = min;
+    this.maxDelay = max;
+    console.log(`[Network] Delay range → ${min}-${max}ms`);
+  }
+}
+
+// Create single network instance (singleton pattern)
+const network = new Network();
