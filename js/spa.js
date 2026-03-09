@@ -1,28 +1,42 @@
 /* ============================================================
-   spa.js — Simple Page Router
+   spa.js — Single Page Application Router
    ============================================================ */
 
 const SPA = (() => {
-
-  // Keep track of all registered pages and which one we're currently showing
-  let _pages = {};
+  
+  // Registry of all available pages
+  const _pages = {};
+  
+  // Currently active page name
   let _current = null;
 
-  // Get the outlet element where pages will be rendered
+  /* ── Helper: Get the outlet element ─────────────────────── */
   function _getOutlet() {
     const outlet = document.getElementById('spa-outlet');
     if (!outlet) {
-      console.error('[SPA] #spa-outlet element not found in DOM');
+      console.error('[SPA] #spa-outlet element not found');
+      return null;
     }
     return outlet;
   }
 
-  // Register a new page with a unique name and its definition
-  function register(name, def) {
-    _pages[name] = def;
+  /* ── Public: Register a page ────────────────────────────── */
+  function register(name, definition) {
+    if (!definition.template) {
+      console.error(`[SPA] Page "${name}" must have a template`);
+      return;
+    }
+    
+    _pages[name] = {
+      template: definition.template,
+      onEnter: definition.onEnter || null,
+      onLeave: definition.onLeave || null
+    };
+    
+    console.log(`[SPA] Registered page: ${name}`);
   }
 
-  // Navigate to a registered page by name, optionally with parameters
+  /* ── Public: Navigate to a page ─────────────────────────── */
   function navigate(name, params = {}) {
     const def = _pages[name];
     if (!def) {
@@ -30,7 +44,7 @@ const SPA = (() => {
       return;
     }
 
-    // Phase 1: Call onLeave of current page (if any)
+    // Phase 1: Call onLeave of current page
     if (_current && _pages[_current] && _pages[_current].onLeave) {
       _pages[_current].onLeave();
     }
@@ -41,6 +55,7 @@ const SPA = (() => {
       console.error(`[SPA] Template not found: "${def.template}"`);
       return;
     }
+    
     const outlet = _getOutlet();
     if (!outlet) return;
 
@@ -55,11 +70,10 @@ const SPA = (() => {
     if (def.onEnter) def.onEnter(params);
   }
 
-
-  function current() {
+  /* ── Public: Get current page name ──────────────────────── */
+  function getCurrentPage() {
     return _current;
   }
 
-
-  return { register, navigate, current };
+  return { register, navigate, getCurrentPage };
 })();

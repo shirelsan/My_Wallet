@@ -44,20 +44,16 @@ const App = (() => {
 
   /* ── Session management ─────────────────────────────────── */
 
-  function setSession(token, user, remember = false) {
+  // Always save session to cookies (7-day expiration)
+  function setSession(token, user) {
     sessionToken = token;
     sessionUser = user;
     CookieManager.saveSession(token, user);
-
-    // "Remember me" just saves the username for next time
-    if (remember) {
-      CookieManager.set('mw_remember_username', user.username, 30);
-    }
   }
 
   // Clear session on logout
   function clearSession() {
-    //  Cancel all active requests before clearing session
+    // Cancel all active requests before clearing session
     cancelAllRequests();
 
     CookieManager.clearSession();
@@ -69,7 +65,7 @@ const App = (() => {
   /* ── Network request wrapper ────────────────────────────── */
 
   function request(method, url, body, onSuccess, onFail) {
-    //  Cancel any previous request to the same URL
+    // Cancel any previous request to the same URL
     if (activeRequests.has(url)) {
       console.log(`[App] Cancelling previous request to ${url}`);
       activeRequests.get(url).abort();
@@ -81,6 +77,7 @@ const App = (() => {
 
     // Store this request
     activeRequests.set(url, req);
+    
     // Handle retry progress for user feedback
     req.onprogress = (event) => {
       if (event.type === 'retry') {
@@ -94,7 +91,8 @@ const App = (() => {
 
     // Success handler
     req.onload = (res) => {
-      //  Remove from active requests
+      // Remove from active requests
+      console.log(`[App] Request completed: ${method} ${url} - removing from activeRequests`);
       activeRequests.delete(url);
 
       if (res.ok) {
@@ -108,7 +106,8 @@ const App = (() => {
 
     // Network error handler (packet dropped, no server, etc)
     req.onerror = () => {
-      //  Remove from active requests
+      // Remove from active requests
+      console.log(`[App] Request failed: ${method} ${url} - removing from activeRequests`);
       activeRequests.delete(url);
 
       toast('Network error – packet dropped. Please retry.', 'error');
@@ -117,13 +116,21 @@ const App = (() => {
 
     req.send(body);
 
-    //  Return the request object (caller can abort if needed)
+    // Return the request object (caller can abort if needed)
     return req;
   }
 
   function cancelAllRequests() {
-    console.log(`[App] Cancelling ${activeRequests.size} active requests`);
-    activeRequests.forEach(req => req.abort());
+    if (activeRequests.size === 0) {
+      console.log('[App] No active requests to cancel');
+      return;
+    }
+    
+    console.log(`[App] Cancelling ${activeRequests.size} active requests:`);
+    activeRequests.forEach((req, url) => {
+      console.log(`  - Cancelling: ${url}`);
+      req.abort();
+    });
     activeRequests.clear();
   }
 
@@ -147,7 +154,6 @@ const App = (() => {
   }
 
   /* ── View management ────────────────────────────────────── */
-
 
   function showView(view) {
     currentView = view;
@@ -233,7 +239,6 @@ const App = (() => {
     }
   }
 
-
   // This is what other modules can access
   return {
     getToken,
@@ -255,7 +260,21 @@ const App = (() => {
 
 /* ── Start the app when DOM is ready ────────────────────── */
 
+// Global error handlers
+window.addEventListener('unhandledrejection', (event) => {
+  console.error('[App] Unhandled promise rejection:', event.reason);
+  event.preventDefault(); // Prevent default browser error handling
+});
+
+window.addEventListener('error', (event) => {
+  console.error('[App] Uncaught error:', event.error);
+});
+
 // Wait for DOM to load, then boot up
 document.addEventListener('DOMContentLoaded', () => {
-  App.boot();
+  try {
+    App.boot();
+  } catch (e) {
+    console.error('[App] Failed to boot:', e);
+  }
 });

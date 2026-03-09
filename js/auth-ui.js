@@ -4,7 +4,6 @@
 
 const AuthUI = (() => {
 
-
   function init() {
     // Wire tab buttons
     document.getElementById('tab-login').addEventListener('click', () => showTab('login'));
@@ -13,13 +12,6 @@ const AuthUI = (() => {
     // Wire submit buttons
     document.getElementById('btn-login').addEventListener('click', doLogin);
     document.getElementById('btn-register').addEventListener('click', doRegister);
-
-    // Auto-fill remembered username
-    const rememberedUsername = Cookies.get('mw_remember_username');
-    if (rememberedUsername) {
-      document.getElementById('login-username').value = rememberedUsername;
-      document.getElementById('login-remember').checked = true;
-    }
 
     // Enter key submits
     document.getElementById('login-password').addEventListener('keydown', e => {
@@ -49,7 +41,6 @@ const AuthUI = (() => {
   function doLogin() {
     const username = document.getElementById('login-username').value.trim();
     const password = document.getElementById('login-password').value;
-    const remember = document.getElementById('login-remember').checked;
     
     if (!username || !password) { 
       setMessage('Please fill in all fields', 'error'); 
@@ -61,10 +52,10 @@ const AuthUI = (() => {
     btn.innerHTML = '<span class="spinner"></span> Signing in…';
     setMessage('Connecting…', 'pending');
 
-    
     App.request('POST', '/auth/login', { username, password },
       (res) => {
-        App.setSession(res.data.token, res.data.user, remember);
+        // Always save session to cookies (no more "remember me" option)
+        App.setSession(res.data.token, res.data.user);
         btn.disabled = false;
         btn.innerHTML = '<span>Sign In</span>';
         App.toast('Welcome back, ' + res.data.user.username + '! 👋', 'success');
@@ -96,7 +87,8 @@ const AuthUI = (() => {
 
     App.request('POST', '/auth/register', { username, email, password },
       (res) => {
-        App.setSession(res.data.token, res.data.user, false);
+        // Always save session to cookies
+        App.setSession(res.data.token, res.data.user);
         btn.disabled = false;
         btn.innerHTML = '<span>Create Account</span>';
         App.toast('Account created! Welcome, ' + res.data.user.username + '! 🎉', 'success');
@@ -112,9 +104,19 @@ const AuthUI = (() => {
 
   // Logout function to be called from the app page
   function doLogout() {
-    App.request('POST', '/auth/logout', null, () => {});
-    App.clearSession();
-    SPA.navigate('auth');
+    // Send logout request and wait for it to complete before clearing session
+    App.request('POST', '/auth/logout', null, 
+      () => {
+        // Success - logout request completed
+        App.clearSession();
+        SPA.navigate('auth');
+      },
+      () => {
+        // Error - logout request failed, but still clear session locally
+        App.clearSession();
+        SPA.navigate('auth');
+      }
+    );
   }
 
   return { init, doLogout };
