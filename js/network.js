@@ -10,7 +10,7 @@ class Network {
     this.appServer = AppServer;         // Handles expenses CRUD
     
     // Network quality settings (you can change these!)
-    this.dropRate = 0.8;     // 20% packet drop rate - not too harsh, not too kind
+    this.dropRate = 0.2;     // 20% packet drop rate - not too harsh, not too kind
     this.minDelay = 1000;    // Minimum delay: 1 second (requirement)
     this.maxDelay = 3000;    // Maximum delay: 3 seconds (requirement)
     
