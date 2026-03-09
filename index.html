@@ -60,6 +60,10 @@
               autocomplete="current-password" />
           </div>
 
+          <button class="btn-primary" id="btn-login">
+            <span>Sign In</span>
+          </button>
+        </div>
 
         <!-- Register form -->
         <div id="form-register" style="display:none">
@@ -311,22 +315,21 @@
        SCRIPTS — NEW LOAD ORDER!
        
        Backend / Infrastructure:
-       1. cookie.js         — Cookie session manager
+       1. cookies.js        — Cookie session manager
        2. dbApi.js          — LocalStorage database
        3. authServer.js     — Auth endpoints
        4. appServer.js      — App endpoints
        5. network.js        — Network layer
        6. fajax.js          — Fake AJAX
        7. spa.js            — SPA router
-       8. cookies.js        — Cookie utilities
        
        Frontend / UI Modules:
-       9. auth-ui.js        — Auth page UI
-       10. expenses-ui.js   — Expenses management UI
-       11. profile-ui.js    — Profile page UI
+       8. auth-ui.js        — Auth page UI
+       9. expenses-ui.js    — Expenses management UI
+       10. profile-ui.js    — Profile page UI
        
        Main App:
-       12. app.js           — Application orchestrator
+       11. app.js           — Application orchestrator
   ══════════════════════════════════════════════════════════ -->
   
   <!-- Backend -->
