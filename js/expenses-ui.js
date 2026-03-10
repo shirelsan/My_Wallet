@@ -20,6 +20,48 @@ const ExpensesUI = (() => {
 
     const pendingUpdates = new Map();
 
+    /* ── Custom confirm dialog ──────────────────────────────── */
+    function showConfirmDialog(title, message, onConfirm) {
+        // Create overlay
+        const overlay = document.createElement('div');
+        overlay.className = 'custom-confirm-overlay';
+        
+        // Create dialog
+        overlay.innerHTML = `
+            <div class="custom-confirm-dialog">
+                <div class="custom-confirm-icon">🗑️</div>
+                <div class="custom-confirm-title">${title}</div>
+                <div class="custom-confirm-message">${message}</div>
+                <div class="custom-confirm-buttons">
+                    <button class="custom-confirm-btn custom-confirm-btn-cancel">Cancel</button>
+                    <button class="custom-confirm-btn custom-confirm-btn-delete">Delete</button>
+                </div>
+            </div>
+        `;
+        
+        document.body.appendChild(overlay);
+        
+        // Wire up buttons
+        const cancelBtn = overlay.querySelector('.custom-confirm-btn-cancel');
+        const deleteBtn = overlay.querySelector('.custom-confirm-btn-delete');
+        
+        const close = () => {
+            overlay.style.animation = 'fadeOut 0.2s ease forwards';
+            setTimeout(() => overlay.remove(), 200);
+        };
+        
+        cancelBtn.addEventListener('click', close);
+        deleteBtn.addEventListener('click', () => {
+            close();
+            onConfirm();
+        });
+        
+        // Close on overlay click
+        overlay.addEventListener('click', (e) => {
+            if (e.target === overlay) close();
+        });
+    }
+
     /* ── Init ───────────────────────────────────────────────── */
     function init() {
         // Toolbar
@@ -270,23 +312,33 @@ const ExpensesUI = (() => {
     /* ── Delete expense ─────────────────────────────────────── */
     function deleteExpense(id) {
         const exp = App.getExpenses().find(e => e.id === id);
-        if (!exp || !confirm(`Delete "${exp.title}"?`)) return;
-        const btn = event.target;
-        const originalHTML = btn.innerHTML;
-        btn.disabled = true;
-        btn.innerHTML = '⏳';
-        App.request('DELETE', `/expenses/${id}`, null,
+        if (!exp) return;
+        
+        // Use custom styled confirm dialog
+        showConfirmDialog(
+            'Delete Expense?',
+            `Are you sure you want to delete <span class="custom-confirm-expense-name">"${exp.title}"</span>? This action cannot be undone.`,
             () => {
-                const expenses = App.getExpenses().filter(e => e.id !== id);
-                App.setExpenses(expenses);
-                renderList(expenses);
-                updateStats(expenses);
-                App.toast('Expense deleted', 'warning');
-            },
-            (res) => {
-                btn.disabled = false;
-                btn.innerHTML = originalHTML;
-                App.toast(res.message || 'Failed to delete', 'error');
+                // User confirmed - proceed with deletion
+                const btn = event.target;
+                const originalHTML = btn.innerHTML;
+                btn.disabled = true;
+                btn.innerHTML = '⏳';
+                
+                App.request('DELETE', `/expenses/${id}`, null,
+                    () => {
+                        const expenses = App.getExpenses().filter(e => e.id !== id);
+                        App.setExpenses(expenses);
+                        renderList(expenses);
+                        updateStats(expenses);
+                        App.toast('Expense deleted', 'warning');
+                    },
+                    (res) => {
+                        btn.disabled = false;
+                        btn.innerHTML = originalHTML;
+                        App.toast(res.message || 'Failed to delete', 'error');
+                    }
+                );
             }
         );
     }

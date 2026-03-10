@@ -204,6 +204,9 @@ const App = (() => {
 
     // Initialize expenses UI and load data
     ExpensesUI.init();
+    
+    // ✨ FIX: Always load expenses when entering app page
+    // This ensures expenses are loaded both on fresh login AND when restoring from cookie
     ExpensesUI.loadExpenses();
   }
 
@@ -233,7 +236,8 @@ const App = (() => {
     if (saved) {
       sessionToken = saved.token;
       sessionUser = saved.user;
-      SPA.navigate('app');  // Auto-login if session exists
+      console.log('[App] Session restored from cookie, navigating to app...');
+      SPA.navigate('app');  // Auto-login if session exists - expenses will load in initAppPage
     } else {
       SPA.navigate('auth');  // No session - show login
     }

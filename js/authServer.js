@@ -4,20 +4,36 @@
 
 const AuthServer = (() => {
 
-  // In-memory map of active session tokens to user IDs
-  const activeSessions = {};
+  const SESSIONS_KEY = 'mw_sessions';
 
+  // ✨ FIX: Load sessions from localStorage instead of only memory
+  function _loadSessions() {
+    const raw = localStorage.getItem(SESSIONS_KEY);
+    return raw ? JSON.parse(raw) : {};
+  }
+
+  // ✨ FIX: Save sessions to localStorage for persistence
+  function _saveSessions(sessions) {
+    localStorage.setItem(SESSIONS_KEY, JSON.stringify(sessions));
+  }
+
+  // Get active sessions (loaded from localStorage)
+  let activeSessions = _loadSessions();
 
   // Create a new session token for a user
   function _createToken(userId) {
     const token = `tok_${userId}_${Date.now()}`;
     activeSessions[token] = userId;
+    _saveSessions(activeSessions);  // ✨ Save to localStorage
+    console.log('[AuthServer] Token created and saved:', token);
     return token;
   }
 
   // Delete a session (used when logging out)
   function _destroyToken(token) {
     delete activeSessions[token];
+    _saveSessions(activeSessions);  // ✨ Save to localStorage
+    console.log('[AuthServer] Token destroyed:', token);
   }
 
   // Make sure registration data is valid
@@ -117,7 +133,16 @@ const AuthServer = (() => {
 
   // Validate a session token and return the associated user ID, or null if invalid
   function validateToken(token) {
-    return activeSessions[token] || null;
+    activeSessions = _loadSessions();
+    const userId = activeSessions[token] || null;
+    
+    if (userId) {
+      console.log(`[AuthServer] ✓ Token validated: ${token} → userId: ${userId}`);
+    } else {
+      console.log(`[AuthServer] ✗ Invalid token: ${token}`);
+    }
+    
+    return userId;
   }
 
   return { handleRequest, validateToken };
