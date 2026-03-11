@@ -180,13 +180,8 @@ const ExpensesUI = (() => {
             renderList(App.getExpenses());
             return;
         }
-
         const filtered = App.getExpenses().filter(e =>
-            e.title.toLowerCase().includes(query) ||
-            e.category.toLowerCase().includes(query) ||
-            (e.description && e.description.toLowerCase().includes(query))
-        );
-
+            e.title.toLowerCase().includes(query));
         renderList(filtered);
     }
 

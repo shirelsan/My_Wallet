@@ -12,7 +12,6 @@ const AuthServer = (() => {
     return raw ? JSON.parse(raw) : {};
   }
 
-  // ✨ FIX: Save sessions to localStorage for persistence
   function _saveSessions(sessions) {
     localStorage.setItem(SESSIONS_KEY, JSON.stringify(sessions));
   }
@@ -24,7 +23,7 @@ const AuthServer = (() => {
   function _createToken(userId) {
     const token = `tok_${userId}_${Date.now()}`;
     activeSessions[token] = userId;
-    _saveSessions(activeSessions);  // ✨ Save to localStorage
+    _saveSessions(activeSessions);  //  Save to localStorage
     console.log('[AuthServer] Token created and saved:', token);
     return token;
   }
@@ -32,7 +31,7 @@ const AuthServer = (() => {
   // Delete a session (used when logging out)
   function _destroyToken(token) {
     delete activeSessions[token];
-    _saveSessions(activeSessions);  // ✨ Save to localStorage
+    _saveSessions(activeSessions);  //  Save to localStorage
     console.log('[AuthServer] Token destroyed:', token);
   }
 

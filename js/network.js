@@ -8,12 +8,12 @@ class Network {
     // Connect to our two servers
     this.authServer = AuthServer;      // Handles login/register/logout
     this.appServer = AppServer;         // Handles expenses CRUD
-    
+
     // Network quality settings (you can change these!)
     this.dropRate = 0.2;     // 20% packet drop rate - not too harsh, not too kind
     this.minDelay = 1000;    // Minimum delay: 1 second (requirement)
     this.maxDelay = 3000;    // Maximum delay: 3 seconds (requirement)
-    
+
     // Race condition handling
     this.requestCounter = 0;           // Unique ID for each request
     this.pendingRequests = new Map();  // Track active requests: requestId → {timestamp, onSuccess, onError}
@@ -22,11 +22,13 @@ class Network {
 
   // Main method to send a request through the network
   send(msg, onSuccess, onError) {
+
+    this.dropRate = parseFloat((Math.random() * 0.4 + 0.1).toFixed(2));
     const requestId = ++this.requestCounter;
     msg.requestId = requestId;
-    
+
     const delay = this._randomDelay();
-    
+
     console.log(
       `[Network] ▶ [${requestId}] ${msg.method} ${msg.url}` +
       `  delay=${delay}ms  dropRate=${(this.dropRate * 100).toFixed(0)}%`
@@ -76,18 +78,18 @@ class Network {
       // Server processes request (async with callback)
       server.handleRequest(msg, (response) => {
         console.log(`[Network] ✓ Server response: [${requestId}] status=${response.status}`);
-        
+
         // Check if we're still waiting for this response
         if (!this.pendingRequests.has(requestId)) {
           console.log(`[Network] ✗ Ignoring late response [${requestId}] - request was cancelled`);
           return;
         }
-        
+
         // Phase 2: Simulate network delay (server → client)
         setTimeout(() => {
           const pending = this.pendingRequests.get(requestId);
           this.pendingRequests.delete(requestId);
-          
+
           if (pending && pending.onSuccess) {
             console.log(`[Network] ◀ Response delivered  [${requestId}] ${msg.url}`);
             pending.onSuccess(response);
@@ -140,33 +142,7 @@ class Network {
     console.log(`[Network] ✗ Cancelled ${count} pending requests`);
   }
 
-  /* ── Configuration methods ──────────────────────────────── */
-
-  // Change packet drop rate (must be between 0.1 and 0.5)
-  setDropRate(rate) {
-    if (rate < 0.1 || rate > 0.5) {
-      console.warn('[Network] Drop rate must be between 0.10 and 0.50');
-      return;
-    }
-    this.dropRate = rate;
-    console.log(`[Network] Drop rate → ${(this.dropRate * 100).toFixed(0)}%`);
-  }
-
-  // Get current drop rate
-  getDropRate() {
-    return this.dropRate;
-  }
-
-  // Set custom delay range
-  setDelayRange(min, max) {
-    if (min < 0 || max < min) {
-      console.warn('[Network] Invalid delay range');
-      return;
-    }
-    this.minDelay = min;
-    this.maxDelay = max;
-    console.log(`[Network] Delay range → ${min}-${max}ms`);
-  }
+  
 }
 
 // Create single network instance (singleton pattern)
