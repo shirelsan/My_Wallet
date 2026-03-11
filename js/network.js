@@ -23,7 +23,6 @@ class Network {
   // Main method to send a request through the network
   send(msg, onSuccess, onError) {
 
-    this.dropRate = parseFloat((Math.random() * 0.4 + 0.1).toFixed(2));
     const requestId = ++this.requestCounter;
     msg.requestId = requestId;
 
